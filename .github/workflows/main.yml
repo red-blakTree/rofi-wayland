@@ -1,0 +1,127 @@
+name: Build rofi-wayland .deb with LLVM 21
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add LLVM APT repository
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm.gpg
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+
+      - name: Install dependencies + LLVM 21 toolchain
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            wayland-protocols \
+            flex \
+            bison \
+            libglib2.0-dev \
+            libstartup-notification0-dev \
+            libxkbcommon-dev \
+            libxcb-xkb-dev \
+            libxcb-randr0-dev \
+            libxcb-xinerama0-dev \
+            libxcb-ewmh-dev \
+            libxcb-cursor-dev \
+            libxcb-icccm4-dev \
+            libxcb-xrm-dev \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            meson \
+            ninja-build \
+            clang-21 \
+            lld-21 \
+            libc++-21-dev \
+            libc++abi-21-dev \
+            libunwind-21-dev \
+            dpkg-dev \
+            fakeroot \
+            pkg-config
+
+      - name: Get latest Rofi release
+        id: get_release
+        run: |
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest)
+          TAR_URL=$(echo "$LATEST_RELEASE" | jq -r '.tarball_url')
+          VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name' | sed 's/^v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tar_url=$TAR_URL" >> $GITHUB_OUTPUT
+
+      - name: Download and extract source
+        run: |
+          mkdir -p rofi-source
+          curl -L "${{ steps.get_release.outputs.tar_url }}" | tar -xz --strip-components=1 -C rofi-source
+
+      - name: Configure with Meson (LLVM 21, Wayland-only)
+        working-directory: rofi-source
+        env:
+          CC: clang-21
+          CXX: clang++-21
+          LDFLAGS: "-fuse-ld=lld-21"
+        run: |
+          meson setup build \
+            --prefix=/usr \
+            --buildtype=release \
+            -Dxcb=disabled \
+            -Dwayland=enabled \
+            -Db_lto=true
+
+      - name: Compile with Ninja
+        working-directory: rofi-source
+        run: |
+          ninja -C build
+
+      - name: Verify binary
+        working-directory: rofi-source
+        run: |
+          ./build/rofi -version
+
+      - name: Create .deb structure
+        run: |
+          PKG_NAME=rofi-wayland
+          VERSION=${{ steps.get_release.outputs.version }}
+          ARCH=$(dpkg --print-architecture)
+
+          mkdir -p rofi-deb/DEBIAN
+          mkdir -p rofi-deb/usr/bin
+
+          cp rofi-source/build/rofi rofi-deb/usr/bin/
+
+          cat > rofi-deb/DEBIAN/control <<EOF
+Package: rofi-wayland
+Version: $VERSION
+Architecture: $ARCH
+Maintainer: CI <actions@github.com>
+Depends: libc6 (>= 2.35), libglib2.0-0 (>= 2.72), libcairo2 (>= 1.16), libpango-1.0-0 (>= 1.50), libgdk-pixbuf-2.0-0 (>= 2.42), libxkbcommon0 (>= 1.4), libwayland-client0 (>= 1.20), libstartup-notification0 (>= 0.12)
+Section: x11
+Priority: optional
+Homepage: https://github.com/davatorium/rofi
+Description: Window switcher and launcher for Wayland (built with LLVM 21)
+ Built with clang-21 and lld-21, XCB support disabled.
+EOF
+
+      - name: Build .deb package
+        run: |
+          fakeroot dpkg-deb --build rofi-deb
+
+      - name: Rename .deb file
+        run: |
+          mv rofi-deb.deb rofi-wayland_${{ steps.get_release.outputs.version }}_$(dpkg --print-architecture).deb
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rofi-wayland-llvm21-deb
+          path: rofi-wayland_*.deb
+          retention-days: 7
