@@ -89,39 +89,19 @@ jobs:
 
       - name: Create .deb structure
         run: |
-          PKG_NAME=rofi-wayland
-          VERSION=${{ steps.get_release.outputs.version }}
+          VERSION="${{ steps.get_release.outputs.version }}"
           ARCH=$(dpkg --print-architecture)
-
-          mkdir -p rofi-deb/DEBIAN
-          mkdir -p rofi-deb/usr/bin
-
+          mkdir -p rofi-deb/DEBIAN rofi-deb/usr/bin
           cp rofi-source/build/rofi rofi-deb/usr/bin/
-
-          cat > rofi-deb/DEBIAN/control <<EOF
-Package: rofi-wayland
-Version: $VERSION
-Architecture: $ARCH
-Maintainer: CI <actions@github.com>
-Depends: libc6 (>= 2.35), libglib2.0-0 (>= 2.72), libcairo2 (>= 1.16), libpango-1.0-0 (>= 1.50), libgdk-pixbuf-2.0-0 (>= 2.42), libxkbcommon0 (>= 1.4), libwayland-client0 (>= 1.20), libstartup-notification0 (>= 0.12)
-Section: x11
-Priority: optional
-Homepage: https://github.com/davatorium/rofi
-Description: Window switcher and launcher for Wayland (built with LLVM 21)
- Built with clang-21 and lld-21, XCB support disabled.
-EOF
-
-      - name: Build .deb package
-        run: |
-          fakeroot dpkg-deb --build rofi-deb
-
-      - name: Rename .deb file
-        run: |
-          mv rofi-deb.deb rofi-wayland_${{ steps.get_release.outputs.version }}_$(dpkg --print-architecture).deb
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rofi-wayland-llvm21-deb
-          path: rofi-wayland_*.deb
-          retention-days: 7
+          printf "%s\n" \
+            "Package: rofi-wayland" \
+            "Version: $VERSION" \
+            "Architecture: $ARCH" \
+            "Maintainer: CI <actions@github.com>" \
+            "Depends: libc6 (>= 2.35), libglib2.0-0 (>= 2.72), libcairo2 (>= 1.16), libpango-1.0-0 (>= 1.50), libgdk-pixbuf-2.0-0 (>= 2.42), libxkbcommon0 (>= 1.4), libwayland-client0 (>= 1.20), libstartup-notification0 (>= 0.12)" \
+            "Section: x11" \
+            "Priority: optional" \
+            "Homepage: https://github.com/davatorium/rofi" \
+            "Description: Window switcher and launcher for Wayland (built with LLVM 21)" \
+            " Built with clang-21 and lld-21, XCB support disabled." \
+            > rofi-deb/DEBIAN/control
