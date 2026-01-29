@@ -35,7 +35,7 @@ jobs:
       - name: Get latest Rofi release
         id: get_release
         run: |
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest)
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest )
           VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name' | sed 's/^v//')
           
           # 精确匹配 rofi-<version>.tar.gz 格式的 asset
