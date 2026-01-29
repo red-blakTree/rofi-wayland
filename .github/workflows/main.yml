@@ -38,12 +38,13 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest)
           VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name' | sed 's/^v//')
           
-          # 提取第一个 asset 的 browser_download_url（可按需调整）
-          BROWSER_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[0].browser_download_url // empty')
+          # 精确匹配 rofi-<version>.tar.gz 格式的 asset
+          BROWSER_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[] | select(.name == "rofi-\(VERSION).tar.gz") | .browser_download_url')
           
-          # 如果 assets 为空，则设为空或报错（这里设为空）
           if [ -z "$BROWSER_URL" ]; then
-            echo "No assets found in the latest release."
+            echo "Error: Asset 'rofi-${VERSION}.tar.gz' not found in release."
+            echo "Available assets:"
+            echo "$LATEST_RELEASE" | jq -r '.assets[].name'
             exit 1
           fi
       
