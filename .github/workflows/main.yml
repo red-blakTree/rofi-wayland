@@ -36,20 +36,24 @@ jobs:
         id: get_release
         run: |
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest)
-          TAR_URL=$(echo "$LATEST_RELEASE" | jq -r '.tarball_url')
           VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name' | sed 's/^v//')
+          
+          # 提取第一个 asset 的 browser_download_url（可按需调整）
+          BROWSER_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[0].browser_download_url // empty')
+          
+          # 如果 assets 为空，则设为空或报错（这里设为空）
+          if [ -z "$BROWSER_URL" ]; then
+            echo "No assets found in the latest release."
+            exit 1
+          fi
+      
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tar_url=$TAR_URL" >> $GITHUB_OUTPUT
+          echo "browser_download_url=$BROWSER_URL" >> $GITHUB_OUTPUT
 
       - name: Download and extract source
         run: |
           mkdir -p rofi-source
           curl -L "${{ steps.get_release.outputs.tar_url }}" | tar -xz --strip-components=1 -C rofi-source
-
-      # 👇 关键修复：移除可能导致 Meson 报错的 subprojects 目录
-      - name: Remove spurious subprojects directory
-        run: |
-          rm -rf rofi-source/subprojects
 
       - name: Configure with Meson (LLVM 21, Wayland-only)
         working-directory: rofi-source
