@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+  schedule:
+    # 每天 UTC 00:00 运行（北京时间 08:00）
+    # 若需北京时间 00:00，请改为 '0 16 * * *'
+    - cron: '0 0 * * *'
 
 jobs:
   build:
@@ -12,6 +16,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt update
+          sudo apt install -y gh
 
       - name: Add LLVM APT repository (correct GPG handling)
         run: |
@@ -38,13 +47,17 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest)
           VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name' | sed 's/^v//')
           
-          # 使用 --arg 将 VERSION 安全传入 jq
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "Error: Failed to fetch version."
+            exit 1
+          fi
+
           BROWSER_URL=$(echo "$LATEST_RELEASE" | jq -r --arg ver "$VERSION" '
             .assets[] | select(.name == ("rofi-" + $ver + ".tar.gz")) | .browser_download_url
           ')
           
           if [ -z "$BROWSER_URL" ]; then
-            echo "Error: Asset 'rofi-${VERSION}.tar.gz' not found in release."
+            echo "Error: Asset 'rofi-${VERSION}.tar.gz' not found."
             echo "Available assets:"
             echo "$LATEST_RELEASE" | jq -r '.assets[].name'
             exit 1
@@ -53,12 +66,33 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "browser_download_url=$BROWSER_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Check if release already exists in this repo
+        id: check_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="llvm21-wayland-v${{ steps.get_release.outputs.version }}"
+          if gh release view "$TAG" &>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists. Skipping build."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if already built
+        if: steps.check_release.outputs.exists == 'true'
+        run: |
+          echo "✅ Version ${{ steps.get_release.outputs.version }} already built. Exiting."
+          exit 0
+
       - name: Download and extract source
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           mkdir -p rofi-source
           curl -L "${{ steps.get_release.outputs.browser_download_url }}" | tar -xz --strip-components=1 -C rofi-source
 
       - name: Configure with Meson (LLVM 21, Wayland-only)
+        if: steps.check_release.outputs.exists != 'true'
         working-directory: rofi-source
         env:
           CC: clang-21
@@ -73,19 +107,24 @@ jobs:
             -Db_lto=true
 
       - name: Compile with Ninja
+        if: steps.check_release.outputs.exists != 'true'
         working-directory: rofi-source
         run: |
           ninja -C build
 
       - name: Verify binary
+        if: steps.check_release.outputs.exists != 'true'
         working-directory: rofi-source
         run: |
           ./build/rofi -version
 
       - name: Create .deb structure
+        if: steps.check_release.outputs.exists != 'true'
+        id: deb
         run: |
           VERSION="${{ steps.get_release.outputs.version }}"
           ARCH=$(dpkg --print-architecture)
+          echo "arch=$ARCH" >> "$GITHUB_OUTPUT"
           mkdir -p rofi-deb/DEBIAN rofi-deb/usr/bin
           cp rofi-source/build/rofi rofi-deb/usr/bin/
           printf "%s\n" \
@@ -102,27 +141,30 @@ jobs:
             > rofi-deb/DEBIAN/control
 
       - name: Build .deb package
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.get_release.outputs.version }}"
-          ARCH=$(dpkg --print-architecture)
+          ARCH="${{ steps.deb.outputs.arch }}"
           dpkg-deb --build --root-owner-group rofi-deb "rofi-wayland_${VERSION}_${ARCH}.deb"
 
       - name: Upload .deb to GitHub Release
+        if: steps.check_release.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.get_release.outputs.version }}
-          name: Rofi Wayland v${{ steps.get_release.outputs.version }} (LLVM 21)
+          tag_name: llvm21-wayland-v${{ steps.get_release.outputs.version }}
+          name: Rofi Wayland v${{ steps.get_release.outputs.version }} (LLVM 21 Build)
           draft: false
           prerelease: false
           files: rofi-wayland_*.deb
           body: |
             Automatically built `.deb` package for **Rofi (Wayland-only)** using **LLVM 21** (clang-21 + lld-21).
-            
+
             - XCB support: **disabled**
-            - Built on Ubuntu 24.04
-            - Architecture: ${{ runner.arch }}
-            
-            Install with:
+            - Built on Ubuntu 24.04 (Noble)
+            - Architecture: ${{ steps.deb.outputs.arch }}
+            - Source: [davatorium/rofi@v${{ steps.get_release.outputs.version }}](https://github.com/davatorium/rofi/releases/tag/v${{ steps.get_release.outputs.version }})
+
+            ## Install
             
