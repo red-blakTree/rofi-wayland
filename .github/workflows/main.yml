@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            wayland-protocols flex bison \
+            libwayland-dev wayland-protocols flex bison \
             libglib2.0-dev libstartup-notification0-dev \
             libxkbcommon-dev libxcb-xkb-dev libxcb-randr0-dev \
             libxcb-xinerama0-dev libxcb-ewmh-dev libxcb-cursor-dev \
