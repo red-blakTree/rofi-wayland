@@ -13,41 +13,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Add LLVM APT repository
+      - name: Add LLVM APT repository (correct GPG handling)
         run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm.gpg
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/llvm.gpg > /dev/null
           echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main" | sudo tee /etc/apt/sources.list.d/llvm.list
 
       - name: Install dependencies + LLVM 21 toolchain
         run: |
           sudo apt update
           sudo apt install -y \
-            wayland-protocols \
-            flex \
-            bison \
-            libglib2.0-dev \
-            libstartup-notification0-dev \
-            libxkbcommon-dev \
-            libxcb-xkb-dev \
-            libxcb-randr0-dev \
-            libxcb-xinerama0-dev \
-            libxcb-ewmh-dev \
-            libxcb-cursor-dev \
-            libxcb-icccm4-dev \
-            libxcb-xrm-dev \
-            libcairo2-dev \
-            libpango1.0-dev \
-            libgdk-pixbuf-2.0-dev \
-            meson \
-            ninja-build \
-            clang-21 \
-            lld-21 \
-            libc++-21-dev \
-            libc++abi-21-dev \
-            libunwind-21-dev \
-            dpkg-dev \
-            fakeroot \
-            pkg-config
+            wayland-protocols flex bison \
+            libglib2.0-dev libstartup-notification0-dev \
+            libxkbcommon-dev libxcb-xkb-dev libxcb-randr0-dev \
+            libxcb-xinerama0-dev libxcb-ewmh-dev libxcb-cursor-dev \
+            libxcb-icccm4-dev libxcb-xrm-dev \
+            libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
+            meson ninja-build \
+            clang-21 lld-21 libc++-21-dev \
+            dpkg-dev fakeroot pkg-config
 
       - name: Get latest Rofi release
         id: get_release
