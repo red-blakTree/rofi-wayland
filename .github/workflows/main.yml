@@ -46,6 +46,11 @@ jobs:
           mkdir -p rofi-source
           curl -L "${{ steps.get_release.outputs.tar_url }}" | tar -xz --strip-components=1 -C rofi-source
 
+      # 👇 关键修复：移除可能导致 Meson 报错的 subprojects 目录
+      - name: Remove spurious subprojects directory
+        run: |
+          rm -rf rofi-source/subprojects
+
       - name: Configure with Meson (LLVM 21, Wayland-only)
         working-directory: rofi-source
         env:
