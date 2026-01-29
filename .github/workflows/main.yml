@@ -35,11 +35,13 @@ jobs:
       - name: Get latest Rofi release
         id: get_release
         run: |
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest )
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/davatorium/rofi/releases/latest)
           VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name' | sed 's/^v//')
           
-          # 精确匹配 rofi-<version>.tar.gz 格式的 asset
-          BROWSER_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[] | select(.name == "rofi-\(VERSION).tar.gz") | .browser_download_url')
+          # 使用 --arg 将 VERSION 安全传入 jq
+          BROWSER_URL=$(echo "$LATEST_RELEASE" | jq -r --arg ver "$VERSION" '
+            .assets[] | select(.name == ("rofi-" + $ver + ".tar.gz")) | .browser_download_url
+          ')
           
           if [ -z "$BROWSER_URL" ]; then
             echo "Error: Asset 'rofi-${VERSION}.tar.gz' not found in release."
@@ -48,13 +50,13 @@ jobs:
             exit 1
           fi
       
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "browser_download_url=$BROWSER_URL" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "browser_download_url=$BROWSER_URL" >> "$GITHUB_OUTPUT"
 
       - name: Download and extract source
         run: |
           mkdir -p rofi-source
-          curl -L "${{ steps.get_release.outputs.tar_url }}" | tar -xz --strip-components=1 -C rofi-source
+          curl -L "${{ steps.get_release.outputs.browser_download_url }}" | tar -xz --strip-components=1 -C rofi-source
 
       - name: Configure with Meson (LLVM 21, Wayland-only)
         working-directory: rofi-source
