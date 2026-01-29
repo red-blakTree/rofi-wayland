@@ -100,3 +100,29 @@ jobs:
             "Description: Window switcher and launcher for Wayland (built with LLVM 21)" \
             " Built with clang-21 and lld-21, XCB support disabled." \
             > rofi-deb/DEBIAN/control
+
+      - name: Build .deb package
+        run: |
+          VERSION="${{ steps.get_release.outputs.version }}"
+          ARCH=$(dpkg --print-architecture)
+          dpkg-deb --build --root-owner-group rofi-deb "rofi-wayland_${VERSION}_${ARCH}.deb"
+
+      - name: Upload .deb to GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_release.outputs.version }}
+          name: Rofi Wayland v${{ steps.get_release.outputs.version }} (LLVM 21)
+          draft: false
+          prerelease: false
+          files: rofi-wayland_*.deb
+          body: |
+            Automatically built `.deb` package for **Rofi (Wayland-only)** using **LLVM 21** (clang-21 + lld-21).
+            
+            - XCB support: **disabled**
+            - Built on Ubuntu 24.04
+            - Architecture: ${{ runner.arch }}
+            
+            Install with:
+            
